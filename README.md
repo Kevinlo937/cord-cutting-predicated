@@ -63,6 +63,20 @@
 
 ---
 
+## 📌 機器學習
+
+- 資料集
+  1.ds_numService.csv
+    由 topMSO_LogisticRegression.ipynb 經由過濾與數值化後產生，並應用於之後其他機器學習與模型訓練
+  2.SMOTE
+    由於樣本在數量上的差異過大，所以透過 SMOTE 擴充資料集
+  
+- python 程式碼
+  1. topMSO_LogisticRegression.ipynb
+  2. topMSO_DecisionTree.ipynb
+  3. topMSO_KNN.ipynb
+  4. topMSO_SVM.ipynb
+
 ## 📬 聯絡人
 
 研究負責人：G13370001 羅文龍  
