@@ -50,6 +50,7 @@
 | `topMSO_KNN.ipynb`                | K-最近鄰（KNN）分類模型分析，**本方法於各模型中表現最佳，accuracy最高，因此另儲存預訓練模型檔 `knn_model.pkl`** |
 | `topMSO_SVM.ipynb`                | 支援向量機（SVM）模型建構                                                           |
 | `topMSO_predict.ipynb`            | 載入 `knn_model.pkl` 模型，針對近期資料集 `ds_test_大屯2025Q1.csv` 進行離退預測並輸出名單         |
+| `topMSO_DL_train.ipynb`           | 深度學習模型訓練與評估，包含 MLP、CNN 和 LSTM 三種模型架構，使用 TensorFlow/Keras 實作              |
 
 ---
 
@@ -79,25 +80,45 @@
 
 ---
 
-## 🆕 Notebook Workflow (2022–2024 Billing & CSR Refresh)
+## 🆕 Notebook Workflow (2022–2024 Billing & CSR Refresh)
 
 下列五本 Notebook 以 **資料前處理 → 特徵衍生 → 資料整併 → 模型訓練** 的流水線形式，重新整備 2022‒2024 帳務、派工、客服來電三大資料源。
 
 | Notebook                            | 主要目的                                          | 重要輸入                                                                                                   | 重要輸出                                                                   |
 | ----------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
 | **`topMSO_add_Vars.ipynb`**         | 為派工資料集新增「平均繳款延遲日數、最常見繳款方式」兩項帳務特徵              | 2022‑2024 帳單原始檔、`ds_numService.csv`                                                                    | `bill_22_24_filtered.csv`, `ds_numService_with_billing.csv`            |
-| **`topMSO_addVars_oneHot.ipynb`**   | 將 繳別、最常見繳款方式、產品名稱\_數值 三欄做 One‑Hot 編碼          | `ds_numService_with_billing.csv`                                                                       | `ds_numService_with_billing_onehot.csv`                                |
+| **`topMSO_addVars_oneHot.ipynb`**   | 將 繳別、最常見繳款方式、產品名稱\_數值 三欄做 One‑Hot 編碼          | `ds_numService_with_billing.csv`                                                                       | `ds_numService_with_billing_onehot.csv`                                |
 | **`topMSO_csr_prepard.ipynb`**      | 解析 2024 全年度客服來電紀錄，產出用於模型的來電特徵                 | `csr_record_2024.csv`                                                                                  | `final_customer_features_dataset.csv`                                  |
-| **`topMSO_csr_service_bill.ipynb`** | 將派工+帳務（已編碼）+來電特徵整合，並補上 2024/12/31 使用狀態(label) | `ds_numService_with_billing_onehot.csv`, `final_customer_features_dataset.csv`, `cleaned_dataset2.csv` | `csr_service_bill.csv`                                                 |
-| **`topMSO_ML_train.ipynb`**         | 以整合後資料集分別訓練 KNN / SVM / Random Forest 三類模型    | `csr_service_bill.csv`                                                                                 | `KNN_model.pkl`, `SVM_model.pkl`, `RF_model.pkl`, `model_metrics.json` |
+| **`topMSO_csr_service_bill.ipynb`** | 將派工+帳務（已編碼）+來電特徵整合，並補上 2024/12/31 使用狀態(label) | `ds_numService_with_billing_onehot.csv`, `final_customer_features_dataset.csv`, `cleaned_dataset2.csv` | `csr_service_bill.csv`                                                 |
+| **`topMSO_ML_train.ipynb`**         | 以整合後資料集分別訓練 KNN / SVM / Random Forest 三類模型    | `csr_service_bill.csv`                                                                                 | `KNN_model.pkl`, `SVM_model.pkl`, `RF_model.pkl`, `model_metrics.json` |
+| **`topMSO_DL_train.ipynb`**         | 以深度學習方法建構離退預測模型，比較 MLP、CNN、LSTM 三種架構效能       | `csr_service_bill.csv`                                                                                 | 訓練完成的 MLP、CNN、LSTM 模型                                                |
 
 > **欄位標準化規則**
 >
-> * **繳別**：僅保留 1, 3, 6, 12, 15；其餘皆設為 99（其他週期）。
-> * **最常見繳款方式**：僅保留 7‑11 CVS 臨櫃、廠商代收、簡訊 7‑11、金融機構轉帳、當月繳帳單、信用卡扣款、APP 7‑11，其餘合併為「其他繳款方式」。
+> * **繳別**：僅保留 1, 3, 6, 12, 15；其餘皆設為 99（其他週期）。
+> * **最常見繳款方式**：僅保留 7‑11 CVS 臨櫃、廠商代收、簡訊 7‑11、金融機構轉帳、當月繳帳單、信用卡扣款、APP 7‑11，其餘合併為「其他繳款方式」。
 > * **產品名稱\_數值**：0=CM、1=EPON。
 
 完整流程請依序執行上表 Notebook，即可得到最新合併資料集與三組機器學習模型。
+
+### 深度學習模型說明 (`topMSO_DL_train.ipynb`)
+
+* **功能**：使用深度學習方法建構客戶離退預測模型，比較不同神經網路架構的效能
+* **主要步驟**：
+  * 載入整合後的 `csr_service_bill.csv` 資料集
+  * 資料預處理：清理缺失值、特徵選擇、標準化
+  * 使用 SMOTE 處理樣本不平衡問題（離退樣本約佔 7.9%）
+  * 建構並訓練三種深度學習模型：
+    * **MLP (多層感知器)**：包含 64 與 32 個神經元的兩個隱藏層
+    * **CNN (卷積神經網路)**：使用一維卷積處理序列特徵
+    * **LSTM (長短期記憶網路)**：捕捉特徵間的序列關係
+  * 模型評估與比較：使用分類報告與混淆矩陣評估各模型效能
+* **技術特點**：
+  * 使用 TensorFlow/Keras 框架實作
+  * 針對不同模型調整資料形狀（MLP 使用標準特徵，CNN/LSTM 使用序列形式）
+  * 採用二元交叉熵損失函數與 Adam 優化器
+  * 每個模型訓練 20 個 epochs，批次大小為 32
+* **應用場景**：適用於需要高精度離退預測的情境，特別是當特徵間存在複雜非線性關係時
 
 ---
 
