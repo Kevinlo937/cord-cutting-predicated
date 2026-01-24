@@ -1,136 +1,91 @@
-# topMSO 客戶離退預測專案
+# ISP 訂戶離退預測系統 (ISP Customer Churn Prediction System)
 
-本專案包含針對原始有線電視用戶資料的預處理、視覺化分析，以及機器學習模型建置，目的是探索並預測用戶離退（Churn）行為，支援企業精準營運決策。
+本專案旨在構建一套端到端（End-to-End）的機器學習管道，利用 **帳務行為**、**維修工單** 與 **客服互動（含 LLM 語意分析）** 等多源異質數據，預測 ISP 寬頻用戶的流失風險。透過進階的特徵篩選策略（SFSS）與不平衡資料處理機制，本系統不僅產出高準確率的預測名單，更結合 ROI 分析模型提供具體的商業決策支持。
 
----
+## 📂 專案架構與 Notebook 流程
 
-## 📂 程式說明
+本專案共包含 9 支核心 Jupyter Notebook，依據資料處理流水分為五大階段：
 
-### 1. `topMSO_Dataset.ipynb`
+### Phase 1: 資料前處理 (Data Preparation)
 
-* **功能**：針對原始資料檔進行預處理，清除離散度過大、非關注服務、甚至不合理資料。
-* **內容**：關聯多份原始資料，建構組合後的清洗資料集，以供後續分析與模型使用。
-* **輸出檔案**：
+*   **`topMSO_Dataset.ipynb`**
+    *   **功能**：基礎資料清洗與標籤定義。
+    *   **核心邏輯**：清洗 25 年跨度的訂閱資料，鎖定 CM/EPON 寬頻產品。處理重複客編（Deduplication），並將「欠款斷線」與「拆機」狀態統一標準化為流失標籤（Churn）。
+    *   **輸出**：用戶狀態快照與基礎工單資料。
 
-| 檔案名稱                       | 說明                                                                                                                             |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `cleaned_dataset2.csv`     | 去識別化後的用戶服務資料集。因檔案過大，提供 [Google Drive 下載連結](https://drive.google.com/file/d/1YK3mAFEyT3nr9Qba7fbNOBz4u88KRyI1/view?usp=sharing) |
-| `cleaned_ds_doService.csv` | 去識別化後的派工單資料集。因檔案過大，提供 [Google Drive 下載連結](https://drive.google.com/file/d/1YL82PAH9FkJwbzUo_LB3aAGyX5os70nq/view?usp=sharing)  |
-| `serviceDay_diff.csv`      | 以最後一次派工單為基準，統計 30 天、60 天、90 天內及以上的派工次數之資料集。                                                                                    |
-| `ds_doService_combo.csv`   | 將派工單 + 用戶服務 + 派工次數整合的合併資料集。                                                                                                    |
+*   **`topMSO_add_Vars.ipynb`**
+    *   **功能**：帳務資料清洗與特徵初步提取。
+    *   **核心邏輯**：利用 Regex 修復混亂的日期格式，並基於「繳費週期」邏輯修復異常的起訖日。計算「平均繳款延遲日數」與提取「最常見繳費方式」。
+    *   **輸出**：含帳務行為的寬表。
 
----
+### Phase 2: 特徵工程 (Feature Engineering)
 
-### 2. `topMSO_visualization.ipynb`
+*   **`topMSO_addVars_oneHot.ipynb`**
+    *   **功能**：類別特徵編碼與降維。
+    *   **核心邏輯**：針對繳費方式與週期進行基數縮減（Cardinality Reduction），保留 Top 7 主流通路，其餘歸類為其他，並執行 One-Hot Encoding。經 EDA 發現用戶呈現「提前繳費」與「嚴重拖欠」的雙峰分佈。
+    *   **輸出**：數值化的帳務特徵集。
 
-* **功能**：以視覺化方式理解資料特性，針對可能與拆機/離退行為相關的因素進行探索。
-* **重點分析項目**：
+*   **`topMSO_csr_prepared.ipynb`**
+    *   **功能**：非結構化客服紀錄（NLP）特徵提取。
+    *   **核心邏輯**：結合 **Jieba 關鍵字分析** 與 **LLM 情緒評分**。計算客戶的來電頻率、主要痛點類別（如報修vs費率），並量化其潛在的離退情緒分數。
+    *   **輸出**：客戶級別的行為與語意特徵表。
 
-  * 派工次數與等待時間分布
-  * 資料間的邏輯與統計相關性驗證
+### Phase 3: 資料整合 (Data Integration)
 
----
+*   **`topMSO_csr_service_bill.ipynb`**
+    *   **功能**：多源異質資料合併與缺失值填補。
+    *   **核心邏輯**：採用 **聯集（Union/Outer Join）** 策略整合工單、客服與帳務特徵，解決不同接觸點覆蓋率不一的問題。實作回溯填補機制（Back-fill Imputation）修復遺失的用戶狀態標籤。
+    *   **輸出**：包含 90+ 特徵的完整訓練寬表。
 
-## 🧠 機器學習模組
+### Phase 4: 特徵選擇與模型優化 (Feature Selection & Tuning)
 
-### 📊 資料集說明
+*   **`SFSS_Advanced_Template.ipynb`**
+    *   **功能**：進階監督式特徵選擇（SFSS）。
+    *   **核心邏輯**：整合 Filter (F-test, MI)、Wrapper (RFECV) 與 Embedded (Lasso, RF, XGB) 多種方法。利用 **Borda 排名聚合（Rank Aggregation）** 找出共識度最高的關鍵特徵，並透過穩定性選擇（Stability Selection）剔除雜訊。
+    *   **輸出**：精選特徵子集與重要性報告。
 
-| 檔案名稱                    | 說明                                                               |
-| ----------------------- | ---------------------------------------------------------------- |
-| `ds_numService.csv`     | 由 `topMSO_LogisticRegression.ipynb` 經過資料過濾與欄位數值化後產生，並應用於後續機器學習訓練 |
-| `train_data_column.csv` | 整合訓練資料與欄位名稱，取代原本 `ai_train_data.csv` 及 `欄位名稱.txt`                |
-| 🔁 `SMOTE` 擴充技術         | 由於正負樣本分布不均，訓練資料經過 SMOTE 處理以平衡樣本比例                                |
+*   **`topMSO_optuna.ipynb`**
+    *   **功能**：XGBoost 超參數自動化調優。
+    *   **核心邏輯**：使用 **Optuna** 進行貝葉斯優化。針對類別不平衡，將 `scale_pos_weight` 納入搜尋空間，並基於 Feature Importance 進行二次特徵篩選，使 AUC 提升至 0.70 以上。
+    *   **輸出**：最佳超參數配置與最佳特徵列表。
 
-### 🧪 使用模型與程式
+### Phase 5: 訓練、預測與商業落地 (Training & Deployment)
 
-| 程式檔案名稱                            | 說明                                                                       |
-| --------------------------------- | ------------------------------------------------------------------------ |
-| `topMSO_LogisticRegression.ipynb` | 邏輯回歸模型建置與評估                                                              |
-| `topMSO_DecisionTree.ipynb`       | 決策樹分類模型訓練與視覺化                                                            |
-| `topMSO_KNN.ipynb`                | K-最近鄰（KNN）分類模型分析，**本方法於各模型中表現最佳，accuracy最高，因此另儲存預訓練模型檔 `knn_model.pkl`** |
-| `topMSO_SVM.ipynb`                | 支援向量機（SVM）模型建構                                                           |
-| `topMSO_predict.ipynb`            | 載入 `knn_model.pkl` 模型，針對近期資料集 `ds_test_大屯2025Q1.csv` 進行離退預測並輸出名單         |
-| `topMSO_DL_train.ipynb`           | 深度學習模型訓練與評估，包含 MLP、CNN 和 LSTM 三種模型架構，使用 TensorFlow/Keras 實作              |
+*   **`topMSO_TrainAfterSFSS.ipynb`**
+    *   **功能**：混合採樣與多模型訓練。
+    *   **核心邏輯**：應用 **SMOTE-Tomek** 混合採樣解決 15:1 的嚴重不平衡。訓練 CNN-1D、LSTM、MLP、XGBoost 與 Random Forest 等多種架構，並導入 **Focal Loss** 與動態閾值優化（Threshold Optimization）以最大化 F1-Score。
+    *   **輸出**：訓練好的模型檔 (.pkl/.keras) 與閾值設定。
 
----
-
-## 📂 平行專案測試資料集
-
-以下資料並未應用於本專案程式碼中，主要由其他平行專案用於測試與驗證模型行為：
-
-| 檔案名稱                        | 說明                             |
-| --------------------------- | ------------------------------ |
-| `ai_pred_data_20250331.csv` | 2025 年用戶預測資料，供模型推論用            |
-| `20250331-離退清單.xls`         | 2025 年 3 月實際離退用戶清單，用於驗證預測結果準確性 |
-| `train_data_column.csv`     | 同時應用於該專案訓練模型之欄位與資料合併格式         |
+*   **`topMSO_predict_1225.ipynb`**
+    *   **功能**：批次預測、回測驗證與 ROI 分析。
+    *   **核心邏輯**：載入訓練模型對新資料進行推論，並透過 **多模型投票（Ensemble Voting）** 鎖定高風險客群。結合行銷成本與挽留成功率進行 **ROI 模擬**，計算淨利潤以輔助決策。
+    *   **輸出**：流失預測名單與商業價值分析報表。
 
 ---
 
-## 📦 原始資料說明
+## 🚀 關鍵技術亮點
 
-### 1. `用戶服務資料2.zip`
+1.  **SFSS (Supervised Feature Selection Strategy)**：
+    不依賴單一指標，而是透過 Borda Count 聚合多種特徵選擇演算法的排名，有效平衡了線性與非線性特徵的捕捉能力，篩選出具備高度穩健性的預測因子。
 
-* **內容**：個資去識別化後的客戶基本服務資料
-* **格式**：CSV 檔，欄位間以 `^` 符號分隔
+2.  **不平衡資料處理 (Imbalanced Learning)**：
+    針對 ISP 產業典型的低流失率（<10%）場景，本專案採用了「混合採樣 (SMOTE + Tomek Links)」結合「代價敏感學習 (Focal Loss / Scale_Pos_Weight)」，強迫模型專注於學習困難的流失樣本。
 
-### 2. `工單.zip`
+3.  **NLP 與 LLM 整合**：
+    突破傳統僅用通話次數的限制，引入 LLM 對客服對話紀錄進行情緒評分，並提取具體的抱怨類別，為模型提供了深層的語意特徵。
 
-* **內容**：2022\~2024 年的用戶派工單資料
-* **格式**：CSV 檔，欄位間以 `^` 符號分隔
-
----
-
-## 🆕 Notebook Workflow (2022–2024 Billing & CSR Refresh)
-
-下列五本 Notebook 以 **資料前處理 → 特徵衍生 → 資料整併 → 模型訓練** 的流水線形式，重新整備 2022‒2024 帳務、派工、客服來電三大資料源。
-
-| Notebook                            | 主要目的                                          | 重要輸入                                                                                                   | 重要輸出                                                                   |
-| ----------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
-| **`topMSO_add_Vars.ipynb`**         | 為派工資料集新增「平均繳款延遲日數、最常見繳款方式」兩項帳務特徵              | 2022‑2024 帳單原始檔、`ds_numService.csv`                                                                    | `bill_22_24_filtered.csv`, `ds_numService_with_billing.csv`            |
-| **`topMSO_addVars_oneHot.ipynb`**   | 將 繳別、最常見繳款方式、產品名稱\_數值 三欄做 One‑Hot 編碼          | `ds_numService_with_billing.csv`                                                                       | `ds_numService_with_billing_onehot.csv`                                |
-| **`topMSO_csr_prepard.ipynb`**      | 解析 2024 全年度客服來電紀錄，產出用於模型的來電特徵                 | `csr_record_2024.csv`                                                                                  | `final_customer_features_dataset.csv`                                  |
-| **`topMSO_csr_service_bill.ipynb`** | 將派工+帳務（已編碼）+來電特徵整合，並補上 2024/12/31 使用狀態(label) | `ds_numService_with_billing_onehot.csv`, `final_customer_features_dataset.csv`, `cleaned_dataset2.csv` | `csr_service_bill.csv`                                                 |
-| **`topMSO_ML_train.ipynb`**         | 以整合後資料集分別訓練 KNN / SVM / Random Forest 三類模型    | `csr_service_bill.csv`                                                                                 | `KNN_model.pkl`, `SVM_model.pkl`, `RF_model.pkl`, `model_metrics.json` |
-| **`topMSO_DL_train.ipynb`**         | 以深度學習方法建構離退預測模型，比較 MLP、CNN、LSTM 三種架構效能       | `csr_service_bill.csv`                                                                                 | 訓練完成的 MLP、CNN、LSTM 模型                                                |
-
-> **欄位標準化規則**
->
-> * **繳別**：僅保留 1, 3, 6, 12, 15；其餘皆設為 99（其他週期）。
-> * **最常見繳款方式**：僅保留 7‑11 CVS 臨櫃、廠商代收、簡訊 7‑11、金融機構轉帳、當月繳帳單、信用卡扣款、APP 7‑11，其餘合併為「其他繳款方式」。
-> * **產品名稱\_數值**：0=CM、1=EPON。
-
-完整流程請依序執行上表 Notebook，即可得到最新合併資料集與三組機器學習模型。
-
-### 深度學習模型說明 (`topMSO_DL_train.ipynb`)
-
-* **功能**：使用深度學習方法建構客戶離退預測模型，比較不同神經網路架構的效能
-* **主要步驟**：
-  * 載入整合後的 `csr_service_bill.csv` 資料集
-  * 資料預處理：清理缺失值、特徵選擇、標準化
-  * 使用 SMOTE 處理樣本不平衡問題（離退樣本約佔 7.9%）
-  * 建構並訓練三種深度學習模型：
-    * **MLP (多層感知器)**：包含 64 與 32 個神經元的兩個隱藏層
-    * **CNN (卷積神經網路)**：使用一維卷積處理序列特徵
-    * **LSTM (長短期記憶網路)**：捕捉特徵間的序列關係
-  * 模型評估與比較：使用分類報告與混淆矩陣評估各模型效能
-* **技術特點**：
-  * 使用 TensorFlow/Keras 框架實作
-  * 針對不同模型調整資料形狀（MLP 使用標準特徵，CNN/LSTM 使用序列形式）
-  * 採用二元交叉熵損失函數與 Adam 優化器
-  * 每個模型訓練 20 個 epochs，批次大小為 32
-* **應用場景**：適用於需要高精度離退預測的情境，特別是當特徵間存在複雜非線性關係時
+4.  **商業價值導向 (Profit-driven Evaluation)**：
+    模型評估不只看 AUC 或 Accuracy，而是直接計算 **ROI (投資報酬率)**。分析顯示，針對多模型共識的高風險客戶進行精準挽留，ROI 最高可達 300% 以上。
 
 ---
 
-## 🎯 專案目標
+## 📚 參考文獻
 
-* 建構拆機/離退預測模型
-* 探索影響客戶忠誠度的因素
-* 提供數據支撐的營運優化建議
+本專案的方法論參考了以下隨機森林與特徵工程領域的經典文獻：
 
----
-
-## 📬 聯絡人
-
-研究負責人：[kevinlo937@gmail.com](mailto:kevinlo937@gmail.com)
-（如需資料或技術討論，請透過專案頁留言）
+*   **Breiman, L.** (2001). Random forests. *Machine learning*, 45(1), 5-32. (定義了 Permutation Importance)
+*   **Strobl, C., et al.** (2008). Conditional variable importance for random forests. *BMC bioinformatics*. (解決高相關特徵的偏誤)
+*   **Kursa, M. B., & Rudnicki, W. R.** (2010). Feature selection with the Boruta package. (全相關特徵選擇)
+*   **Altmann, A., et al.** (2010). Permutation importance: a corrected feature importance measure. (引入 P-value 檢定)
+*   **Fisher, A., et al.** (2019). All Models are Wrong, but Many are Useful: Learning a Variable's Importance by Studying an Entire Class of Prediction Models Simultaneously. *JMLR*. (Model Class Reliance)
+*   **Jean-Charles de Borda** (1781). Mémoire sur les élections au scrutin. (Borda Count 排名聚合法的數學基礎)
