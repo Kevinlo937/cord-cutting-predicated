@@ -32,10 +32,10 @@
 
 ### Phase 3: 資料整合 (Data Integration)
 
-*   **`topMSO_csr_service_bill.ipynb`**
+*   **`topMSO_SFSS.ipynb`**
     *   **功能**：多源異質資料合併與缺失值填補。
-    *   **核心邏輯**：採用 **聯集（Union/Outer Join）** 策略整合工單、客服與帳務特徵，解決不同接觸點覆蓋率不一的問題。實作回溯填補機制（Back-fill Imputation）修復遺失的用戶狀態標籤。
-    *   **輸出**：包含 90+ 特徵的完整訓練寬表。
+    *   **核心邏輯**：整合三大特徵來源（工單 a、帳單 b、客服 c）與狀態/存活資料 d 並進行全域缺失值處理，建構 SFSS 前的統一訓練資料集。
+    *   **輸出**：包含 90+ 特徵的完整訓練資料集。
 
 ### Phase 4: 特徵選擇與模型優化 (Feature Selection & Tuning)
 
